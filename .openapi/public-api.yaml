@@ -1,0 +1,858 @@
+openapi: 3.0.0
+info:
+  title: Public API
+  contact:
+    email: api@dekopay.com
+  license:
+    name: Apache 2.0
+    url: http://www.apache.org/licenses/LICENSE-2.0.html
+  version: 1.1.0
+servers:
+- url: https://virtserver.swaggerhub.com/DekoPay/Public-API/1.1.0
+  description: SwaggerHub API Auto Mocking
+- url: https://api.deko-uat.com/1.0.9
+  description: Staging
+- url: https://api.dekopay.com/1.0.9
+  description: Production
+security:
+- MerchantAuthToken: []
+tags:
+- name: merchants
+  description: Secured Merchant-only calls
+- name: customers
+  description: Calls made by customers to apply for a Deko product.
+paths:
+  /auth:
+    post:
+      tags:
+      - merchants
+      summary: Authenticates API consumers with M2M credentials
+      description: Used by API consumers to authenticate.
+      operationId: auth
+      requestBody:
+        content:
+          application/hal+json:
+            schema:
+              $ref: '#/components/schemas/AccessTokenRequest'
+      responses:
+        "200":
+          description: Success
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/AccessTokenResponse'
+        "400":
+          description: Bad request
+        default:
+          description: Invalid Argument
+      security: []
+  /init:
+    post:
+      tags:
+      - merchants
+      summary: Returns the init token
+      description: Returns the Deko products available to the merchant.
+      operationId: init
+      responses:
+        "200":
+          description: Returns an init token containing the available products.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200'
+        default:
+          description: Access token is missing or invalid.
+  /verify-basket:
+    post:
+      tags:
+      - merchants
+      summary: Verifies the products available for a basket.
+      description: Verify the basket is valid for Deko products
+      operationId: checkout
+      requestBody:
+        description: The current customer basket and billing/shipping details
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CheckoutRequest'
+        required: true
+      responses:
+        "200":
+          description: Verifies that the basket has been accepted and returns a certificate
+            authorizing checkout.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/inline_response_200_1'
+        "400":
+          description: "invalid input, object invalid"
+        default:
+          description: Access token is missing or invalid.
+  /checkout/{product}/{checkoutId}:
+    get:
+      tags:
+      - merchants
+      summary: Retrieves details of a previously processed checkout.
+      description: "Used to retrieve details of a checkout made by a customer. Returns\
+        \ the basket, and result of the checkout."
+      operationId: RetrieveCheckout
+      parameters:
+      - name: product
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/Product'
+      - name: checkoutId
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/CheckoutId'
+      responses:
+        "200":
+          description: Details of the checkout result.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResult'
+        "404":
+          description: Checkout not found.
+        default:
+          description: Access token is missing or invalid.
+  /application/{product}:
+    post:
+      tags:
+      - customers
+      summary: Consumer applies for a credit application on a specific lender or product.
+      description: Consumer applies for a credit application on a specific lender
+        or product.
+      parameters:
+      - name: product
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/Product'
+      responses:
+        "200":
+          description: Application was successfully created.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Application'
+          links:
+            GetApplicationStatus:
+              operationId: FetchApplication
+              parameters:
+                applicationId: $response.body#/id
+        "400":
+          description: Bad request
+        default:
+          description: Invalid Argument
+      security:
+      - BasketAuthorisationCertificate: []
+  /application/{product}/{applicationId}:
+    get:
+      tags:
+      - customers
+      summary: Retrieve the current application.
+      description: Retrieve the current application.
+      operationId: FetchApplication
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/ApplicationId'
+        example: f7210019-2e4a-49f7-bd7b-b167285c5424
+      - name: product
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/Product'
+      responses:
+        "200":
+          description: The application was found.
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/Application'
+          links:
+            GetApplicationStatus:
+              operationId: FetchApplicationStatus
+              parameters:
+                applicationId: $response.body#/id
+        "404":
+          description: The application was not found.
+        default:
+          description: Access token is missing or invalid.
+      security:
+      - BasketAuthorisationCertificate: []
+  /application/{product}/{applicationId}/status:
+    get:
+      tags:
+      - customers
+      summary: Check the status of the current application. Used for polling.
+      description: Check the status of the current application. Used for polling.
+      operationId: FetchApplicationStatus
+      parameters:
+      - name: applicationId
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/ApplicationId'
+      - name: product
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/Product'
+      responses:
+        "200":
+          description: The application status was found.
+          headers:
+            Deko-Poll-Interval:
+              style: simple
+              explode: false
+              schema:
+                type: integer
+                description: "The interval (in seconds) it is recommended to poll\
+                  \ the application status. Failure to adhere to the poll recommendation\
+                  \ (ie, polling too rapidly) may lead to rate limiting."
+                example: 5
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/ApplicationStatus'
+        "404":
+          description: The application was not found.
+        default:
+          description: Access token is missing or invalid.
+      security:
+      - BasketAuthorisationCertificate: []
+  /key/{keyId}:
+    get:
+      tags:
+      - merchants
+      summary: Returns the public key used to sign by Deko.
+      description: Returns a public key which the client can use for local signature
+        verification.
+      operationId: GetSigningKey
+      parameters:
+      - name: keyId
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/SigningKeyId'
+      responses:
+        "200":
+          description: The public key was found and can be returned
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/PublicSigningKey'
+        "404":
+          description: The public key was not found.
+  /key/{keyId}/verify:
+    post:
+      tags:
+      - merchants
+      summary: Verify a payload against a given KeyId. Useful where the merhant ecommerce
+        platform cannot or has no desire to cache and use the public key for local
+        signature checking.
+      description: Used to verify that a given payload has been signed by Deko.
+      operationId: CheckSignature
+      parameters:
+      - name: keyId
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/SigningKeyId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/body'
+        required: true
+      responses:
+        "200":
+          description: The payload was signed by the Deko key.
+        "403":
+          description: The payload was not signed by the Deko key.
+  /transaction/{transactionId}:
+    get:
+      tags:
+      - merchants
+      summary: Returns current Transaction status.
+      description: Returns current Transaction status. For Merchants to obtain checkout
+        status using unique Merchant Unique Reference.
+      parameters:
+      - name: transactionId
+        in: path
+        required: true
+        style: simple
+        explode: false
+        schema:
+          $ref: '#/components/schemas/MerchantUniqueReference'
+      responses:
+        "200":
+          description: Return the checkout details
+          content:
+            application/hal+json:
+              schema:
+                $ref: '#/components/schemas/CheckoutResult'
+        "404":
+          description: The Transaction was not found.
+        default:
+          description: Access token is missing or invalid.
+components:
+  schemas:
+    KeySignature:
+      type: string
+      description: An HMAC signature header provided on Deko callbacks to verify it
+        is from Deko.
+      format: hmac
+      example: M4wYp1MKvDpQtVOnN7LVt9L8or4pKyVLhfUFVJxHemU=
+    AccessTokenRequest:
+      required:
+      - client_id
+      - client_secret
+      type: object
+      properties:
+        client_id:
+          $ref: '#/components/schemas/ClientId'
+        client_secret:
+          $ref: '#/components/schemas/ClientSecret'
+      description: An object representing the request for an Access Token.
+    AccessTokenResponse:
+      required:
+      - access_token
+      - expires_in
+      type: object
+      properties:
+        access_token:
+          $ref: '#/components/schemas/AccessToken'
+        expires_in:
+          $ref: '#/components/schemas/AccessTokenExpires'
+        token_type:
+          $ref: '#/components/schemas/AccessTokenType'
+      description: An object representing an OAuth Access Token
+    AccessToken:
+      type: string
+      description: A valid acess token
+      example: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6Imp6SXZmaU1HNkJqVEpUWGxkRlVwZSJ9.eyJpc3MiOiJodHRwczovL2Rla29wYXktbWVyY2hhbnQtZGV2LmV1LmF1dGgwLmNvbS8iLCJzdWIiOiJ2TDBac0VOOWo1TlQ0VlAzY0ZLQnAxakY5NHNtNUM4dkBjbGllbnRzIiwiYXVkIjoiaHR0cDovL2xvY2FsaG9zdDo4MDgxL2FwaS9jaGVja291dCIsImlhdCI6MTYxNjU5MTU4NywiZXhwIjoxNjE2Njc3OTg3LCJhenAiOiJ2TDBac0VOOWo1TlQ0VlAzY0ZLQnAxakY5NHNtNUM4diIsImd0eSI6ImNsaWVudC1jcmVkZW50aWFscyJ9.F-dzPkJVF0ub2kGiWn1As5PSMnIiqAriOhyux47t7lbNk0tD9Wu655JGHmjuAqqQ3uWyqXx9-feuYjv61xufgBfxH17OkIqBB9lVJzEONoVqF5uIzsnaTD2z0FTzcvOuH8RXzA-_q7vFZwvbboE9iZCFd-JN8vI_1jjWDUpdKFWzGk0-AmID9F7qgNnyC2WEb6DK4Ky5VttXPXcGfnIGD2ybOgkg1dOlBhzabJBT9jU_UQuBoKjqQoNqVm1ovhFJzzSWMsHqDIDOb7r-0zXRB33ka4_oKoVnVrvxL2hGblgC-2Jg6gfB7uuVPdbM5FIBFx8Cbt4T83KxXbpJy5hQbg
+    AccessTokenExpires:
+      minimum: 1
+      type: number
+      description: A number of seconds before the token is due to expire.
+      example: 86400
+    AccessTokenType:
+      type: string
+      description: Access Token Type
+      example: Bearer
+    CheckoutRequest:
+      required:
+      - basket
+      - callbackUri
+      - customer
+      type: object
+      properties:
+        customer:
+          $ref: '#/components/schemas/MerchantCustomer'
+        basket:
+          $ref: '#/components/schemas/MerchantBasket'
+        products:
+          uniqueItems: true
+          type: array
+          description: An array of products the merchant would like to request checkout
+            for.
+          items:
+            $ref: '#/components/schemas/Product'
+        reference:
+          $ref: '#/components/schemas/MerchantUniqueReference'
+        callbackUri:
+          $ref: '#/components/schemas/MerchantCallbackUri'
+      description: A request sent by a merchant to Deko to authorize it.
+    MerchantUniqueReference:
+      pattern: .+
+      type: string
+      description: A unique merchant reference for a customer checkout.
+      example: d290f1ee-6c54-4b01-90e6-d701748f0851
+    MerchantCustomer:
+      required:
+      - billingAddress
+      - email
+      - shippingAddress
+      type: object
+      properties:
+        billingAddress:
+          $ref: '#/components/schemas/Address'
+        shippingAddress:
+          $ref: '#/components/schemas/Address'
+        phone:
+          pattern: "^\\d{6,15}$"
+          type: string
+          description: "Customer's contact telephone number (Zip only accepts max\
+            \ 15 digits, no other chars allowed)"
+          format: phone
+          example: "00447000123456"
+        email:
+          type: string
+          description: Customer's contact email
+          format: email
+          example: jane.doe+deko@gmail.com
+        birthDate:
+          type: string
+          description: "Customer's date of birth (YYYY-mm-dd format). If supplied,\
+            \ needs to be a valid date (e.g. \"2021-02-31\" is\ninvalid, and so is\
+            \ \"2021-99-00\"), and cannot be a future date.\n"
+          format: date
+      description: Customer data
+    Address:
+      required:
+      - address1
+      - country
+      - county
+      - firstName
+      - lastName
+      - postcode
+      - town
+      type: object
+      properties:
+        title:
+          type: string
+          description: "Salutation / Title e.g. Mr, Mrs, Miss, Dr)"
+          example: Dr
+        firstName:
+          type: string
+          description: First name
+          example: Jane
+        lastName:
+          type: string
+          description: Last name
+          example: Doe
+        middleName:
+          type: string
+          description: Middle name
+          example: R.
+        address1:
+          type: string
+          description: The first line of the customer address.
+          example: Deko
+        address2:
+          type: string
+          description: The second line of the customer address.
+          example: 15 Bishopsgate
+        town:
+          type: string
+          description: The customer town.
+          example: Cornhill
+        county:
+          type: string
+          description: The customer county.
+          example: London
+        postcode:
+          pattern: "^[0-9A-Z][0-9A-Z \\\\-]+[0-9A-Z]$"
+          type: string
+          description: "A customer post code (e.g. \"EC2N 3AR\" for UK, \"54100\"\
+            \ for IT, \"20521\" or just \"20521-9000\" for US)"
+          format: postcode
+          example: EC2N 3AR
+        country:
+          pattern: "^[A-Z]{2}$"
+          type: string
+          description: "ISO2 country code (e.g. \"GB\", \"FR\" or \"US\")"
+          example: GB
+      description: A customer address (e.g. billing address).
+    Amount:
+      type: integer
+      description: A positive numeric amount representing a monetary amount in the
+        lowest denomination of the currency
+      format: int64
+      example: 134523
+    Currency:
+      pattern: "^[A-Z]{3}$"
+      type: string
+      description: An ISO3 currency code
+      example: GBP
+      enum:
+      - GBP
+      - USD
+      - AUD
+    MerchantBasket:
+      required:
+      - currency
+      - items
+      - total
+      type: object
+      properties:
+        specialOffers:
+          minItems: 0
+          uniqueItems: true
+          type: array
+          items:
+            $ref: '#/components/schemas/SpecialOffer'
+        currency:
+          $ref: '#/components/schemas/Currency'
+        total:
+          $ref: '#/components/schemas/Amount'
+        items:
+          minItems: 1
+          uniqueItems: true
+          type: array
+          description: "List of all products, tax, discounts and shipping costs part\
+            \ of the basket"
+          items:
+            $ref: '#/components/schemas/LineItem'
+      description: A representation of all the items that the cutomer is attempting
+        to purchase.
+    SpecialOffer:
+      required:
+      - id
+      type: object
+      properties:
+        id:
+          type: string
+          example: a6edc906-2f9f-5fb2-a373-efac406f0ef2
+    LineItem:
+      required:
+      - description
+      - price
+      - quantity
+      - type
+      type: object
+      properties:
+        description:
+          type: string
+          example: A shiny gold watch
+        quantity:
+          minimum: 1
+          type: integer
+          description: The quantity of this item being purchased.
+          example: 1
+        price:
+          $ref: '#/components/schemas/Amount'
+        type:
+          $ref: '#/components/schemas/LineItemType'
+        imageUri:
+          type: string
+          description: Fully qualified product image URI on Merchant's website
+          format: uri
+          example: https://www.merchant.website/product/image/uri.jpg
+        itemUri:
+          type: string
+          description: Fully qualified product page URI on Merchant's website
+          format: uri
+          example: https://www.merchant.website/product1.html
+      description: "A specific item in the customer basket. Includes the description,\
+        \ price, and quantity."
+    LineItemType:
+      type: string
+      description: "Type of line item (e.g. \"sku\", \"discount\", \"shipping\", \"\
+        tax\")"
+      example: sku
+      enum:
+      - sku
+      - discount
+      - shipping
+      - tax
+    Product:
+      type: string
+      description: "One of the existing Deko products (e.g. \"split\"). When none\
+        \ of the products specified, basket will be validated against all elligible\
+        \ products."
+      example: split
+      enum:
+      - split
+      - monthly
+      - revolving_credit
+    InitToken:
+      type: string
+      description: A JWT token containing the products available to the merchant.
+      example: ewogICJ0eXAiOiAiSldUIiwKICAia2lkIjogIjFybDNoc2hxZmo3ZyIsCiAgImFsZyI6ICJSUzI1NiIKfQ.ewogICJpc3MiOiAiaHR0cHM6Ly9hcGkuZGVrb3BheS5jb20vIiwKICAiYXVkIjogImh0dHBzOi8vYXBpLmRla29wYXkuY29tIiwKICAianRpIjogIjY1ZjJkZTk1LTZiZDgtNDJmZS04MjQ3LWFmY2FiNTIxYTZjNSIsCiAgInN1YiI6ICI1YjY1NTM1OC1hODA4LTExZWItYmNiYy0wMjQyYWMxMzAwMDIiLAogICJpYXQiOiAxNjIyNTQ3NTgwLAogICJleHAiOiAxNjIyNTQ5MzgwLAogICJuYW1lIjogIk15IENvbXBhbnkiLAogICJodHRwczovL2FwaS5kZWtvcGF5LmNvbS9wcm9kdWN0IjogewogICAgInNwbGl0IjogewogICAgICAib2ZmZXJzIjogW10sCiAgICAgICJfbGlua3MiOiB7CiAgICAgICAgInNlbGYiOiB7CiAgICAgICAgICAiaHJlZiI6ICJodHRwczovL2Nkbi5kZWtvcGF5LmNvbS93YWxsZXQvaW5kZXguanMiCiAgICAgICAgfSwKICAgICAgICAicHJvZHVjdDphcHBseSI6IHsKICAgICAgICAgICJocmVmIjogImh0dHBzOi8vYXBpLmRla29wYXkuY29tLzEuMC45L2FwcGxpY2F0aW9uL3NwbGl0IgogICAgICAgIH0KICAgICAgfQogICAgfSwKICAgICJyZXZvbHZpbmdfY3JlZGl0IjogewogICAgICAib2ZmZXJzIjogWwogICAgICAgIHsKICAgICAgICAgICJkZXNjcmlwdGlvbiI6ICIxOCBtb250aHMgYXQgMjEuOSUgc3RhbmRhcmQgcmF0ZSIsCiAgICAgICAgICAidGVybSI6IDE4LAogICAgICAgICAgImFwciI6IDIxLjksCiAgICAgICAgICAicHJvbW90aW9uYWwiOiB0cnVlLAogICAgICAgICAgIl9saW5rcyI6IHsKICAgICAgICAgICAgInNlbGYiOiB7CiAgICAgICAgICAgICAgImhyZWYiOiAiaHR0cHM6Ly9hcGkuZGVrb3BheS5jb20vb2ZmZXJzL2MzOWM2YmE1LWU3NGQtNDRkOC04ZjZhLWU3ZGRhMDAyOGFkZiIKICAgICAgICAgICAgfQogICAgICAgICAgfQogICAgICAgIH0sCiAgICAgICAgewogICAgICAgICAgImRlc2NyaXB0aW9uIjogIjEyIG1vbnRocyBhdCAyMS45JSBzdGFuZGFyZCByYXRlIiwKICAgICAgICAgICJ0ZXJtIjogMTIsCiAgICAgICAgICAiYXByIjogMjEuOSwKICAgICAgICAgICJfbGlua3MiOiB7CiAgICAgICAgICAgICJzZWxmIjogewogICAgICAgICAgICAgICJocmVmIjogImh0dHBzOi8vYXBpLmRla29wYXkuY29tL29mZmVycy81NzZhZTk4OC0zZjRhLTQwZGQtYjVkMi1mYWIxOTFhOTQzNDgiCiAgICAgICAgICAgIH0KICAgICAgICAgIH0KICAgICAgICB9LAogICAgICAgIHsKICAgICAgICAgICJkZXNjcmlwdGlvbiI6ICIyNCBtb250aHMgYXQgMjEuOSUgc3RhbmRhcmQgcmF0ZSIsCiAgICAgICAgICAidGVybSI6IDI0LAogICAgICAgICAgImFwciI6IDIxLjksCiAgICAgICAgICAiX2xpbmtzIjogewogICAgICAgICAgICAic2VsZiI6IHsKICAgICAgICAgICAgICAiaHJlZiI6ICJodHRwczovL2FwaS5kZWtvcGF5LmNvbS9vZmZlcnMvYWE4OTk3OTYtZDkyYi00MWZkLThmNmEtNDM2MzVkYWUzZDYzIgogICAgICAgICAgICB9CiAgICAgICAgICB9CiAgICAgICAgfQogICAgICBdLAogICAgICAiX2xpbmtzIjogewogICAgICAgICJzZWxmIjogewogICAgICAgICAgImhyZWYiOiAiaHR0cHM6Ly9jZG4uZGVrb3BheS5jb20vd2FsbGV0L2luZGV4LmpzIgogICAgICAgIH0sCiAgICAgICAgInByb2R1Y3Q6YXBwbHkiOiB7CiAgICAgICAgICAiaHJlZiI6ICJodHRwczovL2FwaS5kZWtvcGF5LmNvbS8xLjAuOS9hcHBsaWNhdGlvbi9yZXZvbHZpbmdfY3JlZGl0IgogICAgICAgIH0KICAgICAgfQogICAgfQogIH0KfQ.fJl6P1W1XMSxHtthDB_4HNWZ3K7dmkjtFXKbK3W25PE
+    CheckoutAuthorizationCertificate:
+      type: string
+      description: A base-64 encoded certificate to authorize the customer to checkout.
+      example: ewogICJ0eXAiOiAiSldUIiwKICAia2lkIjogIjFybDNoc2hxZmo3ZyIsCiAgImFsZyI6ICJSUzI1NiIKfQ.ewogICJpc3MiOiAiaHR0cHM6Ly9hcGkuZGVrb3BheS5jb20vIiwKICAiYXVkIjogImh0dHBzOi8vYXBpLmRla29wYXkuY29tIiwKICAianRpIjogIjBjYWFlYjlhLTY1YjEtNGU2MC1hY2MzLWM2YTYwZGFkOWYzNiIsCiAgInN1YiI6ICI1YjY1NTM1OC1hODA4LTExZWItYmNiYy0wMjQyYWMxMzAwMDIiLAogICJzY29wZSI6ICJhcHBsaWNhdGlvbjpjcmVhdGUiLAogICJuYW1lIjogIk15IENvbXBhbnkiLAogICJodHRwczovL2FwaS5kZWtvcGF5LmNvbS9jaGVja291dCI6IHsKICAgICJ1bmlxdWVSZWZlcmVuY2UiOiAiY2NmNDYzM2MtODgyZi00MjkyLWE0NzYtNzdmMjVjYjBiNTUwIiwKICAgICJjdXN0b21lciI6IHsKICAgICAgImJpbGxpbmdBZGRyZXNzIjogewogICAgICAgICJ0aXRsZSI6ICJEciIsCiAgICAgICAgImZpcnN0TmFtZSI6ICJKYW5lIiwKICAgICAgICAibGFzdE5hbWUiOiAiRG9lIiwKICAgICAgICAibWlkZGxlTmFtZSI6ICJSLiIsCiAgICAgICAgImFkZHJlc3MxIjogIkRla28iLAogICAgICAgICJhZGRyZXNzMiI6ICIxNSBCaXNob3BzZ2F0ZSIsCiAgICAgICAgInRvd24iOiAiQ29ybmhpbGwiLAogICAgICAgICJjb3VudHkiOiAiTG9uZG9uIiwKICAgICAgICAicG9zdGNvZGUiOiAiRUMyTiAzQVIiLAogICAgICAgICJjb3VudHJ5IjogIkdCIgogICAgICB9LAogICAgICAic2hpcHBpbmdBZGRyZXNzIjogewogICAgICAgICJ0aXRsZSI6ICJEciIsCiAgICAgICAgImZpcnN0TmFtZSI6ICJKYW5lIiwKICAgICAgICAibGFzdE5hbWUiOiAiRG9lIiwKICAgICAgICAibWlkZGxlTmFtZSI6ICJSLiIsCiAgICAgICAgImFkZHJlc3MxIjogIkRla28iLAogICAgICAgICJhZGRyZXNzMiI6ICIxNSBCaXNob3BzZ2F0ZSIsCiAgICAgICAgInRvd24iOiAiQ29ybmhpbGwiLAogICAgICAgICJjb3VudHkiOiAiTG9uZG9uIiwKICAgICAgICAicG9zdGNvZGUiOiAiRUMyTiAzQVIiLAogICAgICAgICJjb3VudHJ5IjogIkdCIgogICAgICB9LAogICAgICAicGhvbmUiOiAiMDA0NDcwMDAxMjM0NTYiLAogICAgICAiZW1haWwiOiAiamFuZS5kb2UrZGVrb0BnbWFpbC5jb20iLAogICAgICAiYmlydGhEYXRlIjogIjE5OTctMDUtMTciCiAgICB9LAogICAgImJhc2tldCI6IHsKICAgICAgImN1cnJlbmN5IjogIkdCUCIsCiAgICAgICJ0b3RhbCI6IDE1MDAwMCwKICAgICAgIml0ZW1zIjogWwogICAgICAgIHsKICAgICAgICAgICJkZXNjcmlwdGlvbiI6ICJBIHNoaW55IGdvbGQgd2F0Y2giLAogICAgICAgICAgInF1YW50aXR5IjogMSwKICAgICAgICAgICJwcmljZSI6IDE1MDAwMCwKICAgICAgICAgICJ0eXBlIjogInNrdSIsCiAgICAgICAgICAiaW1hZ2VVcmkiOiAiaHR0cHM6Ly93d3cubWVyY2hhbnQud2Vic2l0ZS9wcm9kdWN0L2ltYWdlL3VyaS5qcGciLAogICAgICAgICAgIml0ZW1VcmkiOiAiaHR0cHM6Ly93d3cubWVyY2hhbnQud2Vic2l0ZS9wcm9kdWN0MS5odG1sIgogICAgICAgIH0KICAgICAgXQogICAgfQogIH0sCiAgImh0dHBzOi8vYXBpLmRla29wYXkuY29tL3Byb2R1Y3QiOiB7CiAgICAicmV2b2x2aW5nX2NyZWRpdCI6IHsKICAgICAgIm9mZmVycyI6IFsKICAgICAgICB7CiAgICAgICAgICAiZGVzY3JpcHRpb24iOiAiMTggbW9udGhzIGF0IDIxLjklIHN0YW5kYXJkIHJhdGUiLAogICAgICAgICAgInRlcm0iOiAxOCwKICAgICAgICAgICJhcHIiOiAyMS45LAogICAgICAgICAgInByb21vdGlvbmFsIjogdHJ1ZSwKICAgICAgICAgICJfbGlua3MiOiB7CiAgICAgICAgICAgICJzZWxmIjogewogICAgICAgICAgICAgICJocmVmIjogImh0dHBzOi8vYXBpLmRla29wYXkuY29tL29mZmVycy9jMzljNmJhNS1lNzRkLTQ0ZDgtOGY2YS1lN2RkYTAwMjhhZGYiCiAgICAgICAgICAgIH0KICAgICAgICAgIH0KICAgICAgICB9LAogICAgICAgIHsKICAgICAgICAgICJkZXNjcmlwdGlvbiI6ICIxMiBtb250aHMgYXQgMjEuOSUgc3RhbmRhcmQgcmF0ZSIsCiAgICAgICAgICAidGVybSI6IDEyLAogICAgICAgICAgImFwciI6IDIxLjksCiAgICAgICAgICAiX2xpbmtzIjogewogICAgICAgICAgICAic2VsZiI6IHsKICAgICAgICAgICAgICAiaHJlZiI6ICJodHRwczovL2FwaS5kZWtvcGF5LmNvbS9vZmZlcnMvNTc2YWU5ODgtM2Y0YS00MGRkLWI1ZDItZmFiMTkxYTk0MzQ4IgogICAgICAgICAgICB9CiAgICAgICAgICB9CiAgICAgICAgfSwKICAgICAgICB7CiAgICAgICAgICAiZGVzY3JpcHRpb24iOiAiMjQgbW9udGhzIGF0IDIxLjklIHN0YW5kYXJkIHJhdGUiLAogICAgICAgICAgInRlcm0iOiAyNCwKICAgICAgICAgICJhcHIiOiAyMS45LAogICAgICAgICAgIl9saW5rcyI6IHsKICAgICAgICAgICAgInNlbGYiOiB7CiAgICAgICAgICAgICAgImhyZWYiOiAiaHR0cHM6Ly9hcGkuZGVrb3BheS5jb20vb2ZmZXJzL2FhODk5Nzk2LWQ5MmItNDFmZC04ZjZhLTQzNjM1ZGFlM2Q2MyIKICAgICAgICAgICAgfQogICAgICAgICAgfQogICAgICAgIH0KICAgICAgXSwKICAgICAgIl9saW5rcyI6IHsKICAgICAgICAic2VsZiI6IHsKICAgICAgICAgICJocmVmIjogImh0dHBzOi8vY2RuLmRla29wYXkuY29tL3dhbGxldC9pbmRleC5qcyIKICAgICAgICB9LAogICAgICAgICJwcm9kdWN0OmFwcGx5IjogewogICAgICAgICAgImhyZWYiOiAiaHR0cHM6Ly9hcGkuZGVrb3BheS5jb20vMS4wLjkvYXBwbGljYXRpb24vcmV2b2x2aW5nX2NyZWRpdCIKICAgICAgICB9CiAgICAgIH0KICAgIH0KICB9LAogICJodHRwczovL2FwaS5kZWtvcGF5LmNvbS9wcm9kdWN0L2luZWxpZ2libGUiOiB7CiAgICAic3BsaXQiOiB7CiAgICAgICJhbW91bnQ6dG9vSGlnaCI6IHsKICAgICAgICAibWF4QW1vdW50IjogOTk5OTkKICAgICAgfQogICAgfQogIH0sCiAgImlhdCI6IDE2MjI1NTA0OTYsCiAgImV4cCI6IDE2MjI1NTIyOTYKfQ.2eO-BlMZZqIlUzCTloaAzlfJg2SDoS-SvemvcSbLFDvO3hhKVo1JFxv-LXn86hG_iBRtPyyWU5EO6_FPuCUcOJ4k41mOjYpmdvlNfr1jp4QkUzL1r2b4TjlVNlhBQ2fps8XVBj3ip5CsQqNRJkYAq8ZUjDqrQpWGdjNICiB9lNZqkQrQtQu4UI9SEegAxFLA0MYxWh6bgjdz4F4SYgxXKVZGReUdJfb5gh1VgwlvW6Zeh0YjWpM_kJdKWciXU6vnen73Fjwi2lvRwQn_EUrigDtdCQf5yuLBFkwzf9cPEDDiIV25w9Ovu0huMkzKq3tjyXxRpLRG8XGCmpN2yxMJJ6kdUE0QJTXJHt3POaiRQxzfx6BU55KIXxOietCixHIgyxipbwOUwH_zPD_qNutvN6d4jjaesnkbE-A_pf38K_KHFtca46BG_6jT9T9vFHaDqf2rO7N5Yt0YWRXVpRKpZX6AccyrkNrbBalDlo1Kzcvajt4A6S-gX3VpLRfkoAexRInRG8o2ExQFUGz3e_LtcumDxf0ik4ewNPJ5bZ19SwJQpm7PAlU6H7mLyxPr1octAK0lYU8yR579WViA3wlPi9ZDZmEswXfTQtzGld-CjiuTgCe0pPAjCpEN-8iUyOVxMv8wdRNNoAcht2pLJOYz3DNgK_uKC2Pe5M0oOkJ_OZk
+    CheckoutResult:
+      required:
+      - _links
+      - basket
+      - created
+      - last_updated
+      - product
+      - status
+      type: object
+      properties:
+        _links:
+          $ref: '#/components/schemas/CheckoutResult__links'
+        basket:
+          $ref: '#/components/schemas/MerchantBasket'
+        product:
+          $ref: '#/components/schemas/Product'
+        status:
+          $ref: '#/components/schemas/CheckoutStatus'
+        created:
+          type: string
+          format: date-time
+        last_updated:
+          type: string
+          format: date-time
+      description: The result of a processed Checkout.
+    CheckoutId:
+      type: string
+      description: A UUID of a customer checkout.
+      format: uuid
+      example: d81fc604-f089-455e-b7c4-43b43399f211
+    CheckoutStatus:
+      type: string
+      description: The status of the customer checkout.
+      example: success
+      enum:
+      - success
+      - failed
+      - pending
+    ClientId:
+      type: string
+      description: A valid client ID API consumers receive when onboarded
+      example: vL0ZsEN9j5NT4VP3cFKBp1jF94sm5C8v
+    ClientSecret:
+      type: string
+      description: Client secret merchants receive when onboarded; used to obtain
+        authentication token
+      example: jTQKBCmoMyvrWGSwIwyNJVG3_APoftqbynyU61hScV1nCnj0gLAvMCocsOTT44xj
+    MerchantCallbackUri:
+      type: string
+      description: The callback URI to send (POST) notification on application success.
+      format: uri
+      example: https://merchant-platform.fake/deko/callback
+    Application:
+      type: object
+      properties:
+        _links:
+          $ref: '#/components/schemas/Application__links'
+        id:
+          $ref: '#/components/schemas/ApplicationId'
+        app:status:
+          $ref: '#/components/schemas/ApplicationStatus'
+      description: The current application
+    ApplicationId:
+      type: string
+      description: Credit application Unique identfier generated by Deko.
+      format: uuid
+      example: f7210019-2e4a-49f7-bd7b-b167285c5424
+    ApplicationStatus:
+      required:
+      - _links
+      - last_updated
+      - reason
+      - state
+      type: object
+      properties:
+        last_updated:
+          type: string
+          description: The date time of the last update to the application status.
+          format: date-time
+        state:
+          type: string
+          description: "* pending - Application/payment has bot been secured, further\
+            \ action is being determined. If a workflow property is present on the\
+            \ response, host the workflow\n* failed - Application/payment has NOT\
+            \ been secured and the checkout cannot continue\n* success - Application/payment\
+            \ has been secured and no further action required, digital receit has\
+            \ been issued\n"
+          enum:
+          - pending
+          - failed
+          - success
+        reason:
+          type: string
+          description: The current status of the order.
+          enum:
+          - pending
+          - require application
+          - processing application
+          - require support action
+          - successful
+          - referred
+          - failed
+          - expired
+          - cancelled
+          - denied
+        pollInterval:
+          type: integer
+          description: The interval in millis to poll for status updates.
+          format: int64
+        receipt:
+          type: string
+          description: A JWT token of the order receipt. This is only present if the
+            app:status is in state 'success'.
+          example: eyJ0eXAiOiJKV1QiLCJraWQiOiIxcmwzaHNocWZqN2ciLCJhbGciOiJSUzI1NiJ9.ewogICJpc3MiOiAiaHR0cHM6Ly9hcGkuZGVrby5jb20vIiwKICAiYXVkIjogImh0dHBzOi8vYXBpLmRla28uY29tIiwKICAianRpIjogImI2ZmI2MTBkLTgxODEtNGE1OC1iOTZhLTM3YWU1YjIwNDMyNSIsCiAgInN1YiI6ICI1YjY1NTM1OC1hODA4LTExZWItYmNiYy0wMjQyYWMxMzAwMDIiLAogICJzY29wZSI6ICJhcHBsaWNhdGlvbjpjcmVhdGUiLAogICJodHRwczovL2FwaS5kZWtvLmNvbS8xLjAuOC9hcHBsaWNhdGlvbiI6IHsKICAgICJzdGF0dXMiOiAic3VjY2VzcyIsCiAgICAicHJvZHVjdCI6ICJzcGxpdCIsCiAgICAibGlua3MiOiBbCiAgICAgIHsKICAgICAgICAicmVsIjogInNlbGYiLAogICAgICAgICJocmVmIjogImh0dHBzOi8vYXBpLmRla28uY29tLzEuMC44L2NoZWNrb3V0L3NwbGl0LzYyYWUxOGMzLTU0NDEtNDMwOS1iNGY1LTg1NjY2MjViMmFhYiIKICAgICAgfQogICAgXSwKICAgICJsYXN0X3VwZGF0ZWQiOiB7CiAgICAgICJuYW5vIjogNTc5MjYzMTAxLAogICAgICAiZXBvY2hTZWNvbmQiOiAxNjIxODQ5MjIxCiAgICB9LAogICAgImFwcGxpY2F0aW9uX2lkIjogIjYyYWUxOGMzLTU0NDEtNDMwOS1iNGY1LTg1NjY2MjViMmFhYiIsCiAgICAidHJhbnNhY3Rpb25faWQiOiAiZDI5MGYxZWUtNmM1NC00YjAxLTkwZTYtZDcwMTc0OGYwODUxIgogIH0sCiAgImlhdCI6IDE2MjE4NDkyMjEsCiAgImV4cCI6IDE2MjE4NTEwMjEKfQ.gPZVNUbTBNF-2TEazJR6fpW2hpksTOPo14qHMQsL7c5twQpQkTbCjFkDVqjSOrvtj24WwCGcI4s3bMLQbk-jvwEcYoFyl2fDgr4jXNFtmhGqpIs0ACv1FyT-e_barsWCUCKQEmhxL7K1xCneUGzEg_uDTKQOCxDl1wRkHl6uGRrCCfTOf4E7Gliqrb1U6YH5GpSS-c3wQLMQeMsePC-GHrA_SVYHp_gxhF2w01Dy7rCN0hRWt4eywaXk3j9d-uD-sWu6Xr3V1w2Q32RXGiXE8EcwRo2SGzwM6YLnj8bV3e59xEheec0NCbetZ24dSxWw2IkaRdgQveaMEaV1sFsTyUVDcQPM_YsltN910xnJCJpD8PUgYOPTmzHbS1ydBk2U5tmf7vZM4XYXfNpNcpZvJLYCLrFM8Bkdghi0ih0O8uHVRiLDuD5rasTmG0WGnmF-wjdMtE4SCJJ3SmryKJDsSd9Cr7Qvdnb38stA-2lGdRJ87LYevVOQCCgBeYjs9LLPpsa-Pg4Ajj3_L5XYGAtmaz3iFhzxSMrU9pskxE077mgyx8Nhb76vQ-jvDJhmRurf1aeSqH5woGz7HpIfKFmnROPs71bRlkCby86qt6EPawdaGEt0RLUad8rNYGmgnlS9dyJOqzhIea8d5R901Ew6cjhHSrimkIY-lX6jU-VUfqY
+        _links:
+          $ref: '#/components/schemas/ApplicationStatus__links'
+      description: "The current status of the customer application. Used to pass information\
+        \ to frontend clients, such as Deko Wallet."
+    PublicSigningKey:
+      type: object
+      properties:
+        _links:
+          $ref: '#/components/schemas/PublicSigningKey__links'
+        key:
+          $ref: '#/components/schemas/PublicSigningKey_key'
+        public:
+          type: string
+          description: The base64-encoded body of the public key
+          example: LS0tLS1CRUdJTiBQVUJMSUMgS0VZLS0tLS0KTUlJQ0lUQU5CZ2txaGtpRzl3MEJBUUVGQUFPQ0FnNEFNSUlDQ1FLQ0FnQllqWXI0ZGdDd1QrYmdyNHY0T2VuUApKUFRDWENQUEI5NUVtdkhyYzFzenl6RjJxNXNvK2Q0d055RzZnTTRNOTE4d3JFWk9lRjRKc3ZKMG5yQ29MY2dtCnJVVWhtcWN5c0pwdWp0UkRBOEZKc20vcWhpYVZiWFptWTlTK3Zhd2cyYUFVeFBxYkN4VEZxMHNnTjljODlRb0MKeFpydzVLMDNXc05rNjN6OU1Ua2loVlJ0dWtxT0RmdGFUY1E2NkUzc2VFY1BuZ0Q2TFhxMFRXNlJzNWVUc3IvUQpvZXN1R0NpNUNzNmNwOVVIWUZRRVdmTUEraW9wZnAyb3FmSW9MSFNsM0tDdy9LZHRGTWFQRkdWcjdkRzFJYWIxCmFManBUR1FWdTFETDdaSjRWU3U1ZjB6S0xwcW9vdzRoNXM2RFk2S0xjTXlpYUlPSVpnYmlSWWJBWmpPZUZxQzkKejlQSjJabXdZVFRmUkVPU2dxNjZQY1VnVU1TSWtRd0V1Mnd1SDMrc3IyN3lldG4zdXBINEpJR2F1MjZBOXh1NQpobFdJMWVKQWk2QnlTWCtSSUtsL0kwRlhoNmFOUXJwQVBJY1ViSkZLZmVwVEU4dnRMdFFYbXpaeEhGajcwWDR6CmxzSk4xVXJMVXhxTzVIZ21BVjFTb1BIU09LUnd1RFE3cUF4dHVnK3k0YzVtcWt0NGtlbkRDOXJHbTlRM1Y2ZmQKS04waUxhWnRScTBROW9JQjk3YmVKbURQY2tRaFFwT3pRTzlIeXpHT0hzZ3lyTGN6U1pRMk13YXg5K2N2MVhTTAowcXN5NXNTMGI5eW9hQ0dycGtZdnlJWkVQQzdtMlEyUVU0Rm5BMnFQNXFoMnA2TWRSOUZGT2wvL084cVJ3S3FnCmo2SjZ0RURhQ3BPcW9ZQWdkZGVQMXdJREFRQUIKLS0tLS1FTkQgUFVCTElDIEtFWS0tLS0t
+        expiry:
+          type: string
+          description: When the key is set to expire. Clients should not cache the
+            public key beyond this date.
+          format: date-time
+      description: A Deko public key used to verify signatures from Deko.
+    SigningKeyHeader:
+      type: object
+      properties:
+        key:public:
+          $ref: '#/components/schemas/SigningKeyUri'
+        key:verify:
+          $ref: '#/components/schemas/SigningKeyVerifierUri'
+      description: An object describing the key used to sign the payload
+    SigningKeyUri:
+      type: object
+      properties:
+        href:
+          type: string
+          format: uri
+          example: /key/32b76dab-1e49-41f0-a802-219cccc0ce54
+    SigningKeyVerifierUri:
+      type: object
+      properties:
+        href:
+          type: string
+          format: uri
+          example: /key/32b76dab-1e49-41f0-a802-219cccc0ce54/verify
+    SigningKeyId:
+      type: string
+      description: A key ID used to denote a particular public key used for signing
+        payloads from Deko.
+      format: uuid
+    inline_response_200:
+      required:
+      - init_token
+      type: object
+      properties:
+        init_token:
+          $ref: '#/components/schemas/InitToken'
+    inline_response_200_1:
+      required:
+      - checkout_certificate
+      type: object
+      properties:
+        checkout_certificate:
+          $ref: '#/components/schemas/CheckoutAuthorizationCertificate'
+    body:
+      required:
+      - payload
+      - string
+      type: object
+      properties:
+        payload:
+          type: object
+        signature:
+          $ref: '#/components/schemas/KeySignature'
+    CheckoutResult__links_self:
+      type: object
+      properties:
+        href:
+          type: string
+          format: uri
+          example: https://api.dekopay.com/1.0.9/checkout/split/d81fc604-f089-455e-b7c4-43b43399f211
+    CheckoutResult__links:
+      type: object
+      properties:
+        self:
+          $ref: '#/components/schemas/CheckoutResult__links_self'
+    Application__links_self:
+      required:
+      - href
+      type: object
+      properties:
+        href:
+          type: string
+          format: uri
+          example: https://api.dekopay.com/1.0.9/application/split/f7210019-2e4a-49f7-bd7b-b167285c5424
+    Application__links:
+      required:
+      - self
+      type: object
+      properties:
+        self:
+          $ref: '#/components/schemas/Application__links_self'
+      description: A HAL _links object. See the HAL spec at http://stateless.co/hal_specification.html
+    ApplicationStatus__links_self:
+      required:
+      - href
+      type: object
+      properties:
+        href:
+          type: string
+          format: uri
+          example: https://api.dekopay.com/1.0.9/application/split/f7210019-2e4a-49f7-bd7b-b167285c5424/status
+    ApplicationStatus__links_workflow:
+      required:
+      - href
+      type: object
+      properties:
+        href:
+          type: string
+          format: uri
+          example: www.FILLMEIN.com/iframe/welikethis?
+    ApplicationStatus__links:
+      type: object
+      properties:
+        self:
+          $ref: '#/components/schemas/ApplicationStatus__links_self'
+        workflow:
+          $ref: '#/components/schemas/ApplicationStatus__links_workflow'
+    PublicSigningKey__links:
+      type: object
+      properties:
+        self:
+          $ref: '#/components/schemas/SigningKeyUri'
+        key:verify:
+          $ref: '#/components/schemas/SigningKeyVerifierUri'
+      description: A HAL _links object. See the HAL spec at http://stateless.co/hal_specification.html
+    PublicSigningKey_key:
+      type: object
+      properties:
+        alg:
+          type: string
+      description: "Metadata on the algorithm, bits, etc of the key"
+  responses:
+    UnauthorizedError:
+      description: Access token is missing or invalid.
+  securitySchemes:
+    MerchantAuthToken:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    BasketAuthorisationCertificate:
+      type: http
+      description: "Basket verification certificate, obtained from verify-basket request."
+      scheme: bearer
+      bearerFormat: JWT
